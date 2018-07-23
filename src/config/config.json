@@ -1,0 +1,20 @@
+{
+    "server": {
+        "port": "8080"
+    },
+    "router": [
+        {
+            "type": "GET",
+            "path": "/",
+            "func": "qaz"
+        },
+        {
+            "path": "/user",
+            "func": "TestClass.User"
+        },
+        {
+            "path": "/user/:id",
+            "func": "TestClass.UserId"
+        }
+    ]
+}
