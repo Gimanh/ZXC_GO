@@ -77,7 +77,7 @@ func (zxc *ZXC) runServer() {
     port := ":" + zxc.config.Server.Port
     s := &http.Server{
         Addr: port,
-        //Handler: routerI,
+        Handler: zxc.Router,
     }
     zxc.registerRoutes()
     log.Fatal(s.ListenAndServe())

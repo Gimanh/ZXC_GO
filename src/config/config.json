@@ -9,11 +9,11 @@
             "func": "qaz"
         },
         {
-            "path": "/user",
+            "path": "/static/:id",
             "func": "TestClass.User"
         },
         {
-            "path": "/user/:id",
+            "path": "/user/:id/:articleId",
             "func": "TestClass.UserId"
         }
     ]
