@@ -1,6 +1,6 @@
 {
     "server": {
-        "port": "8080"
+        "port": ":8080"
     },
     "router": [
         {
@@ -13,7 +13,19 @@
             "func": "TestClass.User"
         },
         {
+            "path": "/static/id",
+            "func": "TestClass.User"
+        },
+        {
             "path": "/user/:id/:articleId",
+            "func": "TestClass.UserId"
+        },
+        {
+            "path": "/user/:id/:articl-eId",
+            "func": "TestClass.UserId"
+        },
+        {
+            "path": "/user/as)",
             "func": "TestClass.UserId"
         }
     ]

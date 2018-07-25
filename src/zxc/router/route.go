@@ -6,3 +6,7 @@ type Route struct {
     Handler string
     Regex   string
 }
+
+func (r *Route) Exec() {
+
+}
