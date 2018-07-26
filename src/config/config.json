@@ -6,7 +6,7 @@
         {
             "type": "GET",
             "path": "/",
-            "func": "qaz"
+            "func": "Hello"
         },
         {
             "path": "/static/:id",

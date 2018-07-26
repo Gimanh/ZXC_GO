@@ -14,6 +14,12 @@ type ZXC struct {
     Router *router.Router
 }
 
+type Routes []struct {
+    Method  string
+    Path    string
+    Handler string
+}
+
 func (zxc *ZXC) GO(configPath string) {
     dir := zxc.getRootDir()
     fullConfigPath := dir + configPath
@@ -29,7 +35,7 @@ func (zxc *ZXC) GO(configPath string) {
         log.Fatal("Porn is not defined")
         return
     }
-    zxc.Router = router.New(zxc.config.Router, zxc.config.Server.Port)
+    zxc.Router = router.New(zxc.config.Router)
     return
 }
 

@@ -14,19 +14,13 @@ type Router struct {
     sectionCount map[int]string
 }
 
-func New(config config.RoutesConfig, port string) *Router {
-    router := &Router{Routes: make(map[string]*Route), sectionCount: make(map[int]string)}
-    router.RegisterRoutesFromConfig(config)
-    router.runServer(port)
-    return router
-}
-
-func (r *Router) runServer(port string) {
-    s := &http.Server{
-        Addr:    port,
-        Handler: r,
+func New(config config.RoutesConfig) *Router {
+    router := &Router{
+        Routes:       make(map[string]*Route),
+        sectionCount: make(map[int]string),
     }
-    log.Fatal(s.ListenAndServe())
+    router.RegisterRoutesFromConfig(config)
+    return router
 }
 
 func (r *Router) ServeHTTP(res http.ResponseWriter, req *http.Request) {
