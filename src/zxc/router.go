@@ -2,130 +2,158 @@ package zxc
 
 import (
     "net/http"
-    "regexp"
-    "strings"
     "fmt"
+    "strings"
+    "hash/fnv"
 )
 
+const SlashByte = 47
+const Colon = 58
+
+type sectionsCountInt int
+type httpMethodName string
+type routeStartWithDynamic bool
+type hashForFirstSection uint64
+
 type Router struct {
-    Methods         map[string]Methods
-    NotFoundHandler Handler
+    methods         map[httpMethodName]*Methods
+    NotFoundHandler http.HandlerFunc
 }
 
-type Handler func(writer http.ResponseWriter, request *Request)
-
 type Methods struct {
-    Routes       map[string]*Route
-    SectionCount map[int]string
+    sections map[sectionsCountInt]map[routeStartWithDynamic]map[hashForFirstSection]*Route
+}
+
+func (r *Router) Add(method string, path string, handler Handle) {
+    sections, sectionsCount := r.split(path)
+    httpMethod := httpMethodName(strings.ToUpper(method))
+    params := &Params{values: make(map[string]string)}
+    route := &Route{
+        sections: sections,
+        handler:  handler,
+        params:   params,
+    }
+
+    if _, exist := r.methods[httpMethod]; !exist {
+        r.methods[httpMethod] = &Methods{sections: make(map[sectionsCountInt]map[routeStartWithDynamic]map[hashForFirstSection]*Route)}
+    }
+
+    hasDynamic := routeStartWithDynamic(r.hasDynamicParams(path))
+    var sec hashForFirstSection
+    if !hasDynamic {
+        sec = hashForFirstSection(r.getUintHash(path))
+    } else {
+        sec = hashForFirstSection(r.getUintHash(sections[0]))
+    }
+
+    if _, exist := r.methods[httpMethod].sections[sectionsCount]; exist {
+        if _, existDynamic := r.methods[httpMethod].sections[sectionsCount][hasDynamic]; !existDynamic {
+            r.methods[httpMethod].sections[sectionsCount][hasDynamic] = make(map[hashForFirstSection]*Route)
+        }
+        r.methods[httpMethod].sections[sectionsCount][hasDynamic][sec] = route
+    } else {
+        r.methods[httpMethod].sections[sectionsCount] = make(map[routeStartWithDynamic]map[hashForFirstSection]*Route)
+        r.methods[httpMethod].sections[sectionsCount][hasDynamic] = make(map[hashForFirstSection]*Route)
+        r.methods[httpMethod].sections[sectionsCount][hasDynamic][sec] = route
+    }
+}
+
+func (r *Router) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+    sections, sectionsCount := r.split(request.URL.Path)
+    if method, methodExist := r.methods[httpMethodName(request.Method)]; methodExist {
+        if routerSections, secCountExist := method.sections[sectionsCount]; secCountExist {
+            if dynSections, dynExist := routerSections[true]; dynExist {
+                hash := hashForFirstSection(r.getUintHash(sections[0]))
+                route := dynSections[hash]
+                if route != nil {
+                    route.url = request.URL.Path
+                    route.urlSections = sections
+                    route.handler(writer, request, route)
+                } else {
+                    for _, value := range dynSections {
+                        if value.sections[0][0] == Colon {
+                            route = value
+                            break
+                        }
+                    }
+                    if route != nil {
+                        route.url = request.URL.Path
+                        route.urlSections = sections
+                        route.handler(writer, request, route)
+                    } else {
+                        r.NotFound(writer, request)
+                    }
+                }
+            } else {
+                if staticSections, staticExist := routerSections[false]; staticExist {
+                    hash := hashForFirstSection(r.getUintHash(request.URL.Path))
+                    route := staticSections[hash]
+                    if route != nil {
+                        route.handler(writer, request, route)
+                    } else {
+                        r.NotFound(writer, request)
+                    }
+                }
+            }
+        }
+    } else {
+        r.NotFound(writer, request)
+    }
+}
+
+func (r *Router) NotFound(writer http.ResponseWriter, request *http.Request) {
+    if r.NotFoundHandler == nil {
+        writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+        writer.WriteHeader(404)
+        fmt.Fprintln(writer, "404 page not found")
+    } else {
+        r.NotFoundHandler(writer, request)
+    }
 }
 
 func NewRouter() *Router {
-    router := &Router{
-        Methods:         make(map[string]Methods),
-    }
+    router := &Router{methods: make(map[httpMethodName]*Methods)}
     return router
 }
 
-func (r *Router) ServeHTTP(w http.ResponseWriter, request *http.Request) {
-    routeParams := r.GetRouteParamsByPath(request.URL.Path, request.Method)
-    if routeParams == nil {
-        r.NotFound(w, request)
-        return
-    }
-    req := &Request{
-        Request: request,
-        Params:  routeParams,
-    }
-    routeParams.Route.Handler(w, req)
-}
+func (r *Router) split(s string) ([]string, sectionsCountInt) {
+    begin := 1
+    length := len(s)
+    var sliceCapacity sectionsCountInt
+    sliceCapacity = 0
 
-func (r *Router) GetUserHandler(path string, method string) Handler {
-    if !r.MethodExist(method) {
-        return nil
-    }
-    routeParams := r.GetRouteParamsByPath(path, method)
-    return routeParams.Route.Handler
-}
-
-func (r *Router) NotFound(w http.ResponseWriter, req *http.Request) {
-    if r.NotFoundHandler == nil {
-        w.WriteHeader(404)
-        fmt.Fprint(w, "HTTP: 404")
-    }
-    r.NotFoundHandler(w, nil)
-}
-
-func (r *Router) RegisterRoute(route *Route, method string) {
-    r.Methods[method].Routes[route.Regex] = route
-}
-
-func (r *Router) Add(method string, path string, handler Handler) {
-    if !r.MethodExist(method) {
-        r.CreateMethod(method)
-    }
-    method = strings.ToUpper(method)
-    route := &Route{
-        Method:  strings.ToUpper(method),
-        Path:    path,
-        Handler: handler,
-        Regex:   r.GetRegexpFromPath(path),
-    }
-    r.RegisterRoute(route, method)
-}
-
-func (r *Router) GetRouteParamsByPath(path string, method string) *Params {
-    for index, value := range r.Methods[method].Routes {
-        reg := regexp.MustCompile(value.Regex)
-        match := reg.MatchString(path)
-        if match {
-            regSub := regexp.MustCompile(index)
-            params := regSub.FindStringSubmatch(path)
-            names := regSub.SubexpNames()
-            par := &Params{Route: value, Params: make(map[string]string)}
-            if len(params) > 1 {
-                for i := 1; i < len(params); i++ {
-                    par.Params[names[i]] = params[i]
-                }
-            }
-            return par
+    for j := 0; j < length; j++ {
+        if s[j] == SlashByte {
+            sliceCapacity++
         }
     }
-    return nil
-}
 
-func (r *Router) GetRegexpFromPath(path string) string {
-    allowedParamChars := `[a-zA-Z0-9]+`
-    rxCompile := `:(` + allowedParamChars + `)`
-    replace := `(?P<$1>` + allowedParamChars + `)`
-    var re = regexp.MustCompile(rxCompile)
-    s := re.ReplaceAllString(path, replace)
-    a := s + `$`
-    return a
-}
-
-func (r *Router) IsValidPath(path string) bool {
-    var re = regexp.MustCompile(`^[\/a-zA-Z0-9:.]*$`)
-    match := re.MatchString(path)
-    return match
-}
-
-func (r *Router) RouteExist(path string, method string) bool {
-    sections := strings.Split(path, "/")
-    sections = sections[1:]
-    sectionCount := len(sections)
-    _, exist := r.Methods[method].SectionCount[sectionCount]
-    return exist
-}
-
-func (r *Router) MethodExist(method string) bool {
-    _, exists := r.Methods[method]
-    return exists
-}
-
-func (r *Router) CreateMethod(method string) bool {
-    r.Methods[method] = Methods{
-        Routes:       make(map[string]*Route),
-        SectionCount: make(map[int]string),
+    sliceStrings := make([]string, sliceCapacity)
+    indexInSlice := 0
+    for i := 0; i < length; i++ {
+        if s[i] == SlashByte && i != 0 {
+            sliceStrings[indexInSlice] = s[begin:i]
+            begin = i + 1
+            indexInSlice++
+        }
     }
-    return true
+    sliceStrings[indexInSlice] = s[begin:length]
+    return sliceStrings, sliceCapacity
+}
+
+func (r *Router) hasDynamicParams(s string) bool {
+    length := len(s)
+    for i := 0; i < length; i++ {
+        if s[i] == Colon {
+            return true
+        }
+    }
+
+    return false
+}
+
+func (r *Router) getUintHash(s string) uint64 {
+    h := fnv.New64a()
+    h.Write([]byte(s))
+    return h.Sum64()
 }
