@@ -1,6 +1,6 @@
 # ZXC_GO
 
-## ZXC Router Usages (It's that simple)
+## ZXC Router v0.0.2 Usages (It's that simple)
 
 ```go
 package main
