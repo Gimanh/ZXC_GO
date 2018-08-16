@@ -5,6 +5,7 @@ import (
     "fmt"
     "strings"
     "hash/fnv"
+    "path"
 )
 
 const SlashByte = 47
@@ -24,8 +25,9 @@ type Methods struct {
     sections map[sectionsCountInt]map[routeStartWithDynamic]map[hashForFirstSection]*Route
 }
 
-func (r *Router) Add(method string, path string, handler Handle) {
-    sections, sectionsCount := r.split(path)
+func (r *Router) Add(method string, pathUrl string, handler Handle) {
+    pathUrl = path.Clean(pathUrl)
+    sections, sectionsCount := r.split(pathUrl)
     httpMethod := httpMethodName(strings.ToUpper(method))
     params := &Params{values: make(map[string]string)}
     route := &Route{
@@ -38,10 +40,10 @@ func (r *Router) Add(method string, path string, handler Handle) {
         r.methods[httpMethod] = &Methods{sections: make(map[sectionsCountInt]map[routeStartWithDynamic]map[hashForFirstSection]*Route)}
     }
 
-    hasDynamic := routeStartWithDynamic(r.hasDynamicParams(path))
+    hasDynamic := routeStartWithDynamic(r.hasDynamicParams(pathUrl))
     var sec hashForFirstSection
     if !hasDynamic {
-        sec = hashForFirstSection(r.getUintHash(path))
+        sec = hashForFirstSection(r.getUintHash(pathUrl))
     } else {
         sec = hashForFirstSection(r.getUintHash(sections[0]))
     }
@@ -59,14 +61,14 @@ func (r *Router) Add(method string, path string, handler Handle) {
 }
 
 func (r *Router) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-    sections, sectionsCount := r.split(request.URL.Path)
+    sections, sectionsCount := r.split(path.Clean(request.URL.Path))
     if method, methodExist := r.methods[httpMethodName(request.Method)]; methodExist {
         if routerSections, secCountExist := method.sections[sectionsCount]; secCountExist {
             if dynSections, dynExist := routerSections[true]; dynExist {
                 hash := hashForFirstSection(r.getUintHash(sections[0]))
                 route := dynSections[hash]
                 if route != nil {
-                    route.url = request.URL.Path
+                    route.url = path.Clean(request.URL.Path)
                     route.urlSections = sections
                     route.handler(writer, request, route)
                 } else {
@@ -77,7 +79,7 @@ func (r *Router) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
                         }
                     }
                     if route != nil {
-                        route.url = request.URL.Path
+                        route.url = path.Clean(request.URL.Path)
                         route.urlSections = sections
                         route.handler(writer, request, route)
                     } else {
@@ -86,7 +88,7 @@ func (r *Router) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
                 }
             } else {
                 if staticSections, staticExist := routerSections[false]; staticExist {
-                    hash := hashForFirstSection(r.getUintHash(request.URL.Path))
+                    hash := hashForFirstSection(r.getUintHash(path.Clean(request.URL.Path)))
                     route := staticSections[hash]
                     if route != nil {
                         route.handler(writer, request, route)
