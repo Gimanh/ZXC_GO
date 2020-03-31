@@ -1,12 +1,12 @@
-package zxc
+package zxc_go
 
 type ZXC struct {
-    Router *Router
+	Router *Router
 }
 
 func GO() *ZXC {
-    zxc := &ZXC{
-        Router: NewRouter(),
-    }
-    return zxc
+	zxc := &ZXC{
+		Router: NewRouter(),
+	}
+	return zxc
 }
