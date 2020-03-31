@@ -1,4 +1,4 @@
-package zxc_go
+package ZXC_GO
 
 type ZXC struct {
 	Router *Router
